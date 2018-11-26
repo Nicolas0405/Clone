@@ -1,0 +1,51 @@
+version: 2
+jobs:
+  build:
+    node:
+      version: 8.9.1
+    timezone:
+      America/Bogota
+  steps:
+    -checkout
+    - run: wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    - run: sudo dpkg -i google-chrome-stable_current_amd64.deb
+    - run: npm install -g gulp
+    - run: npm install -g @angular/cli@1.7.4
+    - run: npm install
+
+    - run: ng build -aot
+    - run: ng test --code-coverage --watch=false -sm=false
+    - run: gulp sonar
+    - run: git config --global user.email circleci@circleci
+    - run: git config --global user.name CircleCI
+    - run: git clone git@github.com:bancodebogota/scripts.git
+    - run: mv scripts/sonar-code-quality.js . && chmod +x sonar-code-quality.js
+    - run: node sonar-code-quality.js
+
+    -deploy:
+      name: Deploy  prod
+      command: |
+
+        if [ "${CIRCLE_BRANCH}" == "master" ]; then
+        if["$(git log -1 | egrep 'master-release' | echo $(tr -d ' '))" == "master-release"]; then
+                  echo "Ignoring release"
+                else
+                  echo "Comienza el versionamiento"
+                  #gulp deployProd && gulp invalidateCacheOffProd && gulp invalidateCacheWebProd && gulp invalidateCacheWebProd2
+                  NODENV=prod gulp build && NODENV=prod gulp deploy
+                  NODENV=webprod gulp build && NODENV=webprod gulp deploy
+                  echo "Deploy Versionamiento"
+                  # ###############################################################################################################################
+                  #                                                   VERSIONING                                                                 #
+                  # The last suffix of a branch name, for example "mvp7_changes_minor", would be the indicator of a version number like as shows #
+                  # in the next section:                                                                                                         #
+                  #   -  version major (X.0.0)                                                                                                   #
+                  #   -  version minor (0.X.0)                                                                                                   #
+                  #   -  version patch (0.0.X)                                                                                                   #
+                  # NOTE: When sufix of branch name doesn't corresponds to any suffix declared in the section, the system use as default "patch" #
+                  ################################################################################################################################
+                  chmod 755 deploy.sh && ./deploy.sh
+                fi
+            else
+               echo "Not deployed in ST y PROD"
+            fi
